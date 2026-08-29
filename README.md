@@ -102,6 +102,35 @@ In Outline's admin settings, add a webhook subscription pointing at
 `https://auth.example.com/outline/webhook/`, subscribed to `users.signin`, using the same secret as
 `OUTLINE_WEBHOOK_SECRET`.
 
+The API token is under **Settings → API & Access** in Outline v1.9.2. Keys default to a 30-day
+expiry — pick `No expiration` unless you plan to rotate. The value is shown once, and a key can only
+be revoked from a browser session (`apiKeys.delete` rejects API-key auth), so store it when it is
+created. `webhookSubscriptions.create` does accept API-key auth, so the webhook half can be scripted.
+
+Two things block delivery when Outline and Alliance Auth are on the same private network — for
+example both in one Docker Compose stack, with Outline posting to `http://auth:8000/outline/webhook/`:
+
+- **Outline refuses to deliver to private addresses.** The delivery fails with no HTTP status at all
+  and a message like `DNS lookup 172.24.0.4(family:4, host:auth) is not allowed. Because, It is
+  private IP address.` Set `ALLOWED_PRIVATE_IP_ADDRESSES` on the Outline container to the IPs or
+  CIDRs it may reach (`172.16.0.0/12` covers a default Compose network).
+- **Django's `ALLOWED_HOSTS` must contain the hostname Outline uses.** The request arrives with
+  `Host: auth:8000`, so without `auth` in `ALLOWED_HOSTS` Django answers 400 with a `DisallowedHost`
+  page. This one leaves no trace where you would look — the request never reaches the view, so the
+  AA log has no `outline/webhook` line at all.
+
+Both entries have to match whatever hostname you actually use.
+
+### Reading webhook deliveries
+
+Outline's UI has no delivery log. A rejected signature (403) and a `DisallowedHost` (400) both show
+as a plain failure from Outline's side, so check its database directly:
+
+```sh
+psql -U outline -d outline -c \
+  'select status, "statusCode", "requestHeaders", "responseBody" from webhook_deliveries order by "createdAt" desc limit 5;'
+```
+
 ### 8. Grant the permission
 
 Grant `outline.access_outline` to the states or groups that should sync.

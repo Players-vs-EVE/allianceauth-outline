@@ -16,7 +16,8 @@ from . import app_settings, tasks
 
 logger = logging.getLogger(__name__)
 
-# Outline sends a millisecond epoch in the signature header.
+# Outline sends a millisecond epoch in the signature header. Confirmed against a
+# v1.9.2 delivery: t=1788031032640 for a webhook recorded at 19:17:12.635 UTC.
 MAX_SKEW_SECONDS = 300
 
 
