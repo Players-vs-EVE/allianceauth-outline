@@ -87,6 +87,31 @@ class SyncUserTestCase(TestCase):
 
         self.client.remove_user.assert_not_called()
 
+    def test_accounts_sharing_an_email_get_the_union_of_their_groups(self):
+        # Two AA accounts, one Outline user. Syncing either must not strip the
+        # groups the other granted.
+        self.link()
+        other = User.objects.create(username="alt", email=self.user.email)
+        other_group = Group.objects.create(name="Logi Reserve")
+        other.groups.add(other_group)
+        OutlineUser.objects.create(
+            user=other, outline_user_id=OUTLINE_UID, email=other.email
+        )
+        self.client.list_groups.return_value = [
+            {"id": "g1", "name": "Logistics", "externalId": self.external_id},
+            {"id": "g2", "name": "Logi Reserve",
+             "externalId": f"allianceauth:{other_group.pk}"},
+        ]
+        self.client.list_groups_for_user.return_value = [
+            {"id": "g2", "name": "Logi Reserve",
+             "externalId": f"allianceauth:{other_group.pk}"},
+        ]
+
+        _sync_user(self.user, self.client)
+
+        self.client.add_user.assert_called_once_with("g1", OUTLINE_UID)
+        self.client.remove_user.assert_not_called()
+
     def test_a_deny_rule_removes_the_user(self):
         self.link()
         GroupSyncRule.objects.create(action="deny", match="exact", value="Logistics")

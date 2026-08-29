@@ -1,6 +1,7 @@
 """The only module that talks to Outline's API."""
 
 import logging
+import math
 
 import requests
 
@@ -33,6 +34,14 @@ class OutlineRateLimited(OutlineApiError):
         self.retry_after = retry_after
 
 
+def _retry_after(response, default=60) -> int:
+    """Outline sends a fractional Retry-After, e.g. `33.01`."""
+    try:
+        return math.ceil(float(response.headers["Retry-After"]))
+    except (KeyError, ValueError):
+        return default
+
+
 class OutlineClient:
     def __init__(self, url: str, token: str):
         self.url = url.rstrip("/")
@@ -50,7 +59,7 @@ class OutlineClient:
         if response.status_code == 429:
             raise OutlineRateLimited(
                 f"{endpoint} rate limited",
-                retry_after=int(response.headers.get("Retry-After", 60)),
+                retry_after=_retry_after(response),
                 status=429,
                 body=response.text,
             )
@@ -68,7 +77,11 @@ class OutlineClient:
                 status=response.status_code,
                 body=response.text,
             )
-        return response.json()["data"]
+        # groups.delete and friends answer {"success": true} with no data key.
+        try:
+            return response.json().get("data")
+        except ValueError:
+            return None
 
     def _paginate(self, endpoint: str, key=None, **body):
         offset = 0

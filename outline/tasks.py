@@ -63,9 +63,16 @@ def _sync_user(user, client):
         return
 
     rules = list(GroupSyncRule.objects.filter(enabled=True))
+    # Several AA accounts can share an email and so resolve to one Outline user.
+    # The desired set is their union: computing it from one account alone makes
+    # each sync strip the groups the others granted.
+    sharing = User.objects.filter(
+        outline__outline_user_id=outline_user.outline_user_id
+    )
     desired = {
         external_id_for(group.pk): group.name
-        for group in user.groups.all().select_related("authgroup")
+        for group in Group.objects.filter(user__in=sharing)
+        .select_related("authgroup").distinct()
         if group_is_synced(group, rules)
     }
 
@@ -201,17 +208,30 @@ def reconcile(self) -> None:
         return
 
     rules = list(GroupSyncRule.objects.filter(enabled=True))
-    for outline_group in groups:
-        if not _managed(outline_group):
-            continue
-        pk = outline_group["externalId"][len(EXTERNAL_ID_PREFIX):]
-        if not pk.isdigit():
-            logger.warning("Skipping Outline group with malformed externalId %r",
-                           outline_group["externalId"])
-            continue
-        aa_group = Group.objects.filter(pk=pk).select_related("authgroup").first()
-        if aa_group is None or not group_is_synced(aa_group, rules):
-            client.delete_group(outline_group["id"])
+    if rules:
+        for outline_group in groups:
+            if not _managed(outline_group):
+                continue
+            pk = outline_group["externalId"][len(EXTERNAL_ID_PREFIX):]
+            if not pk.isdigit():
+                logger.warning("Skipping Outline group with malformed externalId %r",
+                               outline_group["externalId"])
+                continue
+            aa_group = Group.objects.filter(pk=pk).select_related("authgroup").first()
+            if aa_group is None or not group_is_synced(aa_group, rules):
+                # One failed delete must not abort the sweep, and must not cost
+                # the resync below — that would hide the deletions still happening.
+                try:
+                    client.delete_group(outline_group["id"])
+                except Exception:
+                    logger.exception("Could not delete Outline group %s",
+                                     outline_group["id"])
+    else:
+        # Without rules every managed group looks orphaned. Deleting them all
+        # would take their collection permissions with them.
+        logger.warning(
+            "No enabled group sync rules, skipping the deletion sweep"
+        )
 
     pks = OutlineUser.objects.values_list("user_id", flat=True)
     if pks:

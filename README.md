@@ -155,7 +155,13 @@ prefix — the autogroup prefixes are themselves configurable.
 Editing a rule triggers a reconcile, so a change takes effect within one task rather than at the next
 scheduled run.
 
-Note: an exact-name rule stores a name, so renaming that AA group orphans the rule.
+Note: an exact-name rule stores a name, so renaming that AA group orphans the rule. Nothing
+revalidates rules on rename, so the group stops matching and the next reconcile deletes its Outline
+group — along with any collection permissions granted to it. Update the rule when you rename.
+
+As a floor under that, `outline.reconcile` skips its deletion sweep entirely when no rule is enabled:
+with an empty table every managed group looks orphaned, and deleting all of them at once is never
+what an operator meant.
 
 ## Permissions
 

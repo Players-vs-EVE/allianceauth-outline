@@ -34,6 +34,32 @@ class OutlineClientTestCase(TestCase):
 
         self.assertEqual(ctx.exception.retry_after, 17)
 
+    def test_rate_limit_handles_a_fractional_retry_after(self):
+        # Outline sends e.g. "33.01"; int() on that raises, which used to lose
+        # the OutlineRateLimited entirely and fall back to a 600s retry.
+        with requests_mock.Mocker() as m:
+            m.post(f"{URL}/api/groups.create", status_code=429,
+                   headers={"Retry-After": "33.01"})
+            with self.assertRaises(OutlineRateLimited) as ctx:
+                self.client_.create_group("x", "allianceauth:1")
+
+        self.assertEqual(ctx.exception.retry_after, 34)
+
+    def test_rate_limit_falls_back_when_the_header_is_missing(self):
+        with requests_mock.Mocker() as m:
+            m.post(f"{URL}/api/groups.create", status_code=429)
+            with self.assertRaises(OutlineRateLimited) as ctx:
+                self.client_.create_group("x", "allianceauth:1")
+
+        self.assertEqual(ctx.exception.retry_after, 60)
+
+    def test_a_response_with_no_data_key_is_not_an_error(self):
+        # groups.delete answers {"success": true} with no data.
+        with requests_mock.Mocker() as m:
+            m.post(f"{URL}/api/groups.delete",
+                   json={"success": True, "status": 200, "ok": True})
+            self.assertIsNone(self.client_.delete_group("g1"))
+
     def test_forbidden_and_not_found_and_other_errors_map(self):
         for status, expected in (
             (403, OutlineForbidden),
