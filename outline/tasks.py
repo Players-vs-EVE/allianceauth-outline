@@ -112,8 +112,8 @@ def _sync_user(user, client):
 def _retry(task, exc):
     if isinstance(exc, OutlineForbidden):
         logger.error(
-            "Outline refused the request (403). Outline's own group sync cannot "
-            "run alongside this plugin: %s", exc
+            "Outline refused the request (403). Check the API token's scopes "
+            "and that it belongs to an Outline admin: %s", exc
         )
         return
     if isinstance(exc, OutlineRateLimited):

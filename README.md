@@ -28,14 +28,21 @@ seconds rather than at the next poll.
 ## Requirements
 
 - Alliance Auth >= 4.0.0
-- An Outline instance and an API token belonging to an **Outline admin**. A non-admin token gets no
-  email addresses back from `users.list`, so nothing matches, and it cannot create groups.
+- An Outline instance and an API token belonging to an **Outline admin**, scoped `users:read` and
+  `groups:write`. Admin membership and scopes are separate requirements — see
+  [the API token section](#the-api-token) for both.
 
-## Incompatible with Outline's own group sync
+## If Outline ever grows group sync
 
-Outline marks groups it manages through SCIM or OIDC group claims with `ExternalGroup` rows, and
-refuses API membership changes on them with a 403. Do not enable Outline's directory sync against
-the same install — this app and that feature cannot both manage groups.
+Outline refuses API changes to a group it considers externally managed — one with `ExternalGroup`
+rows. `groups.update` rejects a rename, and `groups.add_user`, `groups.remove_user` and
+`groups.update_user` reject any membership change, each with a 400 and
+`"This group is managed by an external provider and its membership cannot be modified"`.
+
+As of v1.9.2 nothing can put a group in that state on a generic OIDC install: Outline has no SCIM,
+and while `server/utils/GroupSyncProvider.ts` defines the interface, no shipped auth plugin
+implements it. So this does not affect the install today. It is recorded here because if a future
+Outline release ships group sync for OIDC, that feature and this app cannot both manage groups.
 
 ## Installation
 
@@ -103,10 +110,39 @@ In Outline's admin settings, add a webhook subscription pointing at
 `https://auth.example.com/outline/webhook/`, subscribed to `users.signin`, using the same secret as
 `OUTLINE_WEBHOOK_SECRET`.
 
-The API token is under **Settings → API & Access** in Outline v1.9.2. Keys default to a 30-day
-expiry — pick `No expiration` unless you plan to rotate. The value is shown once, and a key can only
-be revoked from a browser session (`apiKeys.delete` rejects API-key auth), so store it when it is
-created. `webhookSubscriptions.create` does accept API-key auth, so the webhook half can be scripted.
+### The API token
+
+Under **Settings → API & Access** in Outline v1.9.2. Keys default to a 30-day expiry — pick
+`No expiration` unless you plan to rotate. The value is shown once, and a key can only be revoked
+from a browser session (`apiKeys.delete` rejects API-key auth), so store it when it is created.
+`webhookSubscriptions.create` does accept API-key auth, so the webhook half can be scripted.
+
+**Scopes.** Two are enough:
+
+```
+users:read
+groups:write
+```
+
+`users:read` covers `users.list` and `users.info`. `groups:write` covers every group call the app
+makes — Outline's `canAccess` short-circuits a namespaced `write` scope, so it grants the group reads
+too and `groups:read` is redundant alongside it. Note `groups.add_user` and `groups.remove_user` are
+absent from Outline's `methodToScope` map and so default to write; read-only group scopes are not
+enough.
+
+To be narrower, grant route scopes instead — one per call the app makes:
+
+```
+/api/users.list  /api/users.info
+/api/groups.list  /api/groups.info  /api/groups.create  /api/groups.update
+/api/groups.add_user  /api/groups.remove_user
+```
+
+Leaving scopes empty grants `*`. Don't.
+
+**Scopes do not substitute for admin membership.** They gate which routes the key may call; whether
+`users.list` returns email addresses at all depends on the account being an Outline admin. A
+correctly scoped key on a non-admin account matches nobody.
 
 Two things block delivery when Outline and Alliance Auth are on the same private network — for
 example both in one Docker Compose stack, with Outline posting to `http://auth:8000/outline/webhook/`:

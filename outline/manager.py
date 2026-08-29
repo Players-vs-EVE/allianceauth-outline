@@ -24,8 +24,8 @@ class OutlineNotFound(OutlineApiError):
 
 
 class OutlineForbidden(OutlineApiError):
-    """Permanent — retrying will not help. Usually the group is managed by
-    Outline's own directory sync, which this plugin cannot coexist with."""
+    """Permanent — retrying will not help. Usually the API token's scopes are
+    too narrow, or it does not belong to an Outline admin."""
 
 
 class OutlineRateLimited(OutlineApiError):
