@@ -24,10 +24,9 @@ def group_saved(sender, instance, created, **kwargs):
     )
 
 
-@receiver(post_delete, sender=Group)
-def group_deleted(sender, instance, **kwargs):
-    pk = instance.pk
-    transaction.on_commit(lambda: tasks.delete_group.delay(pk))
+# No post_delete receiver on Group: the plugin does not delete Outline groups.
+# Members are removed by the next per-user sync, leaving an empty group behind.
+# See issue #1.
 
 
 @receiver(post_save, sender=GroupSyncRule)

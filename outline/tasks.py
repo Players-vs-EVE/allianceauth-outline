@@ -184,55 +184,18 @@ def sync_group(self, pk: int, name: str) -> None:
         _retry(self, e)
 
 
-@shared_task(bind=True, name="outline.delete_group", base=QueueOnce,
-             max_retries=MAX_RETRIES)
-def delete_group(self, pk: int) -> None:
-    client = outline_client()
-    try:
-        group = client.group_by_external_id(external_id_for(pk))
-        if group is not None and _managed(group):
-            client.delete_group(group["id"])
-    except Exception as e:
-        _retry(self, e)
-
-
 @shared_task(bind=True, name="outline.reconcile", base=QueueOnce,
              max_retries=MAX_RETRIES)
 def reconcile(self) -> None:
-    """Catch drift the signals miss, then resync everyone."""
-    client = outline_client()
-    try:
-        groups = client.list_groups()
-    except Exception as e:
-        _retry(self, e)
-        return
+    """Resync every linked user, catching drift the signals miss.
 
-    rules = list(GroupSyncRule.objects.filter(enabled=True))
-    if rules:
-        for outline_group in groups:
-            if not _managed(outline_group):
-                continue
-            pk = outline_group["externalId"][len(EXTERNAL_ID_PREFIX):]
-            if not pk.isdigit():
-                logger.warning("Skipping Outline group with malformed externalId %r",
-                               outline_group["externalId"])
-                continue
-            aa_group = Group.objects.filter(pk=pk).select_related("authgroup").first()
-            if aa_group is None or not group_is_synced(aa_group, rules):
-                # One failed delete must not abort the sweep, and must not cost
-                # the resync below — that would hide the deletions still happening.
-                try:
-                    client.delete_group(outline_group["id"])
-                except Exception:
-                    logger.exception("Could not delete Outline group %s",
-                                     outline_group["id"])
-    else:
-        # Without rules every managed group looks orphaned. Deleting them all
-        # would take their collection permissions with them.
-        logger.warning(
-            "No enabled group sync rules, skipping the deletion sweep"
-        )
-
+    This deliberately does not delete Outline groups. Deleting one takes its
+    collection permissions with it, and the triggers are too easy to hit by
+    accident — renaming an AA group orphans an exact-match rule, and nothing
+    revalidates rules on rename. Group memberships are still corrected, so a
+    group that should no longer sync is emptied rather than removed. See issue
+    #1 for doing deletion properly.
+    """
     pks = OutlineUser.objects.values_list("user_id", flat=True)
     if pks:
         chain([update_groups.si(pk) for pk in pks]).apply_async(

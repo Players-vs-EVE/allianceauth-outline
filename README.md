@@ -23,6 +23,7 @@ seconds rather than at the next poll.
   skipped until they log in.
 - It never deletes an Outline account, and never touches a group that has no `allianceauth:`
   `externalId`.
+- **It never deletes an Outline group** — see below. It empties them instead.
 
 ## Requirements
 
@@ -155,13 +156,18 @@ prefix — the autogroup prefixes are themselves configurable.
 Editing a rule triggers a reconcile, so a change takes effect within one task rather than at the next
 scheduled run.
 
-Note: an exact-name rule stores a name, so renaming that AA group orphans the rule. Nothing
-revalidates rules on rename, so the group stops matching and the next reconcile deletes its Outline
-group — along with any collection permissions granted to it. Update the rule when you rename.
+Note: an exact-name rule stores a name, and nothing revalidates rules on rename, so renaming that AA
+group orphans the rule and its members stop syncing. Update the rule when you rename.
 
-As a floor under that, `outline.reconcile` skips its deletion sweep entirely when no rule is enabled:
-with an empty table every managed group looks orphaned, and deleting all of them at once is never
-what an operator meant.
+### Groups are never deleted
+
+Deleting an AA group, or changing the rules so a group no longer syncs, does **not** delete the
+Outline group. Members are removed by the next per-user sync, so access is still revoked correctly —
+the empty Outline group is left behind for an admin to remove by hand.
+
+This is deliberate for now. Deleting an Outline group takes any collection permissions granted to it
+with it, and the triggers were too easy to hit by accident. Tracked in
+[issue #1](https://github.com/Players-vs-EVE/allianceauth-outline/issues/1).
 
 ## Permissions
 

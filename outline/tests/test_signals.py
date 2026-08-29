@@ -23,14 +23,15 @@ class SignalTestCase(TestCase):
 
         sync_group.assert_not_called()
 
-    def test_delete_queues_delete_group(self):
+    def test_delete_queues_nothing(self):
+        # The plugin does not delete Outline groups. Members are removed by the
+        # next per-user sync, leaving an empty group behind. See issue #1.
         group = Group.objects.create(name="Doomed")
-        pk = group.pk
-        with patch("outline.tasks.delete_group.delay") as delete_group:
+        with patch("outline.tasks.sync_group.delay") as sync_group:
             with self.captureOnCommitCallbacks(execute=True):
                 group.delete()
 
-        delete_group.assert_called_once_with(pk)
+        sync_group.assert_not_called()
 
     def test_saving_a_rule_queues_a_reconcile(self):
         with patch("outline.tasks.reconcile.delay") as reconcile:
