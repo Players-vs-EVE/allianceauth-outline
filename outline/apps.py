@@ -8,3 +8,6 @@ class OutlineConfig(AppConfig):
     label = "outline"
 
     verbose_name = f"Outline v{__version__}"
+
+    def ready(self):
+        from . import signals  # noqa: F401

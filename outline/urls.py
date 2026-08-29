@@ -5,5 +5,5 @@ from . import views
 app_name = "outline"
 
 urlpatterns = [
-    path("", views.index, name="index"),
+    path("webhook/", views.webhook, name="webhook"),
 ]

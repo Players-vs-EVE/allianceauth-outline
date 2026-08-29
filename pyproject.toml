@@ -22,6 +22,12 @@ classifiers = [
 ]
 dependencies = [
     "allianceauth>=4.0.0",
+    "requests>=2.9.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "requests-mock>=1.2",
 ]
 
 [project.entry-points."allianceauth.hooks"]
@@ -34,4 +40,4 @@ version = {attr = "outline.__version__"}
 where = ["."]
 
 [tool.setuptools.package-data]
-outline = ["templates/**/*.html", "static/**/*"]
+outline = ["static/**/*"]
