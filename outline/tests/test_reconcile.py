@@ -28,15 +28,15 @@ class ReconcileTestCase(TestCase):
     def run_reconcile(self):
         # Call the function rather than .apply(): QueueOnce wants a celery app
         # with ONCE configured, which the test settings have no reason to carry.
-        with patch("outline.tasks.chain") as chain:
+        with patch("outline.tasks.celery_group") as fanout:
             reconcile.run()
-        return chain
+        return fanout
 
     def test_resyncs_every_linked_user(self):
-        chain = self.run_reconcile()
+        fanout = self.run_reconcile()
 
-        chain.assert_called_once()
-        chain.return_value.apply_async.assert_called_once()
+        fanout.assert_called_once()
+        fanout.return_value.apply_async.assert_called_once()
 
     def test_never_deletes_an_outline_group(self):
         # Deletion is disabled: it takes collection permissions with it and the
@@ -53,6 +53,6 @@ class ReconcileTestCase(TestCase):
     def test_does_nothing_when_no_user_is_linked(self):
         OutlineUser.objects.all().delete()
 
-        chain = self.run_reconcile()
+        fanout = self.run_reconcile()
 
-        chain.assert_not_called()
+        fanout.assert_not_called()

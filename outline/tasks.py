@@ -1,6 +1,6 @@
 import logging
 
-from celery import chain, shared_task
+from celery import group as celery_group, shared_task
 
 from django.contrib.auth.models import Group, User
 from django.utils.timezone import now
@@ -198,6 +198,9 @@ def reconcile(self) -> None:
     """
     pks = OutlineUser.objects.values_list("user_id", flat=True)
     if pks:
-        chain([update_groups.si(pk) for pk in pks]).apply_async(
+        # group() not chain(): update_groups carries QueueOnce, and one link
+        # blocked by a stale retry was observed to swallow the whole chain,
+        # costing every other user their resync. Nothing here needs ordering.
+        celery_group([update_groups.si(pk) for pk in pks]).apply_async(
             priority=BULK_TASK_PRIORITY
         )
